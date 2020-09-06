@@ -1,0 +1,185 @@
+﻿// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel gen_gaussian_tex
+// gen spectrum info, including height, displacement and slop.
+#pragma kernel gen_spectrum
+// gen vertex info after fft, including vertex positions, normals and foams.
+#pragma kernel gen_vertex_info
+#pragma kernel gen_phillips
+
+// Create a RenderTexture with enableRandomWrite flag and set it
+// with cs.SetTexture
+RWTexture2D<float2> rand_tex;  // gaussian random texture
+RWTexture2D<float2> phillips_tex; //
+RWTexture2D<float2> init_spectrum_tex;  //
+RWTexture2D<float2> height_spectrum_tex;  // height(z) info in frequency domain
+RWTexture2D<float2> displace_spectrum_x_tex;  // x and z displacement info in frequency domain
+RWTexture2D<float2> displace_spectrum_z_tex;  // x and z displacement info in frequency domain
+RWTexture2D<float2> slop_spectrum_x_tex;   // slop
+RWTexture2D<float2> slop_spectrum_z_tex;   // slop
+
+RWTexture2D<float4> pos_tex; // vertex data(x, y, z) in time domain
+RWTexture2D<float4> normal_tex; // vertex normal, w is for foam
+
+int n;       // ocean size
+float2 wind; // wind speed and direction.
+float2 wind_dir;  // wind direction normalized.
+float phillips_factor; // phillips spectrum constant factor
+float time;          // time in seconds
+
+float height_factor;  // height scale factor
+float displacement_factor;  // xz scale factor
+
+#define PI 3.14159265359f
+#define NTHREADS 1
+#define G 9.81998f
+
+uint rng_state;
+
+uint wang_hash(uint seed) {
+	seed = (seed ^ 61) ^ (seed >> 16);
+	seed *= 9;
+	seed = seed ^ (seed >> 4);
+	seed *= 0x27d4eb2d;
+	seed = seed ^ (seed >> 15);
+	return seed;
+}
+
+float rand()
+{
+	rng_state ^= (rng_state << 13);
+	rng_state ^= (rng_state >> 17);
+	rng_state ^= (rng_state << 5);
+	return rng_state / 4294967296.0f;
+}
+
+[numthreads(NTHREADS, NTHREADS, 1)]
+void gen_gaussian_tex(uint3 id: SV_DispatchThreadID)
+{
+	rng_state = wang_hash(id.y * n + id.x);
+	// generate two independent uniform distribution.
+	float x1 = rand();
+	float x2 = rand();
+
+	// Box–Muller transform
+	// use two independent uniform distribution to generate
+	// two independent standard normal distribution.
+	x1 = max(1e-6f, x1);
+	x2 = max(1e-6f, x2);
+	float g1 = sqrt(-2.0f * log(x1)) * cos(2.0f * PI * x2);
+	float g2 = sqrt(-2.0f * log(x1)) * sin(2.0f * PI * x2);
+
+	rand_tex[id.xy] = float2(g1, g2);
+}
+
+float phillips(float2 k)
+{
+	//float k_len = max(0.0001f, length(k));
+	float k_len2 = max(0.001f, length(k));
+
+	float L = dot(wind, wind) / G;
+	float L2 = L * L;
+	float phi_num = exp(-1.0 / (k_len2 * L2));
+	float phi_denom = k_len2 * k_len2;
+
+	float damping = 0.001f;
+	float fix_factor = exp(-L2 * damping * damping);
+	
+	return phi_num * phillips_factor / phi_denom * fix_factor;
+}
+
+// directional wind spreading model in
+// Tessendorf's original paper "Simulating Ocean Water".
+float cosine_squared_dir_wind_spreading(float2 k) {
+	float2 k_nor = normalize(k);
+	float x = dot(k_nor, wind_dir);
+	return x * x * x * x * x * x;
+
+	/*float theta = atan2(k.y, k.x) - atan2(wind_dir.y, wind_dir.x);
+	float x = 2.0f / PI * pow(cos(theta), 2);
+	if (theta > -PI / 2.0f && theta < PI / 2.0f)
+	{
+		return x;
+	}
+	else
+	{
+		return x * sqrt(x) * 0.25f;
+	}*/
+}
+
+float dispersion(float2 k) {
+	float w_0 = 2.0f * PI / 200.0f;
+	return floor(sqrt(G * length(k)) / w_0) * w_0;
+}
+
+inline float2 mul(float2 a, float2 b) {
+	return float2(
+		a.x * b.x - a.y * b.y,
+		a.x * b.y + a.y * b.x
+		);
+}
+
+inline float2 exp_i(float theta) {
+	return float2(cos(theta), sin(theta));
+}
+
+inline float2 conj(float2 a) {
+	return float2(a.x, -a.y);
+}
+
+[numthreads(NTHREADS, NTHREADS, 1)]
+void gen_phillips(uint3 id: SV_DispatchThreadID)
+{
+	float2 k = float2(2.0f * PI * id.x / n - PI, 2.0f * PI * id.y / n - PI);
+	float k_len = max(0.00001f, length(k));
+
+	float2 gaussian = rand_tex[id.xy].xy;
+
+	float phi = phillips(k) * cosine_squared_dir_wind_spreading(k);
+	phillips_tex[id.xy] = float2(phi, 0);
+
+	float2 spectrum = gaussian * sqrt(abs(phillips(k) * cosine_squared_dir_wind_spreading(k)) * 0.5f);
+	init_spectrum_tex[id.xy] = spectrum;
+}
+
+[numthreads(NTHREADS, NTHREADS, 1)]
+void gen_spectrum(uint3 id: SV_DispatchThreadID)
+{
+	float2 k = float2(2.0f * PI * id.x / n - PI, 2.0f * PI * id.y / n - PI);
+	float k_len = max(0.00001f, length(k));
+
+	float2 gaussian = rand_tex[id.xy].xy;
+
+	float2 spectrum = gaussian * sqrt(abs(phillips(k) * cosine_squared_dir_wind_spreading(k)) * 0.5f);
+	float2 spectrum_conj = gaussian * sqrt(abs(phillips(-k) * cosine_squared_dir_wind_spreading(-k)) * 0.5f);
+	spectrum_conj.y *= -1.0f;
+
+	float2 omegat = exp_i(dispersion(k) * time);
+	float2 h1 = mul(spectrum, omegat);
+	float2 h2 = mul(spectrum_conj, conj(omegat));
+
+	float2 height = h1 + h2;
+	height_spectrum_tex[id.xy] = height;
+
+	float2 slop_x = mul(float2(0.0f, k.x), height);
+	float2 slop_z = mul(float2(0.0f, k.y), height);
+
+	float2 displace_x = -slop_x / k_len;
+	float2 displace_z = -slop_z / k_len;
+	slop_spectrum_x_tex[id.xy] = slop_x;
+	slop_spectrum_z_tex[id.xy] = slop_z;
+	displace_spectrum_x_tex[id.xy] = displace_x;
+	displace_spectrum_z_tex[id.xy] = displace_z;
+}
+
+[numthreads(NTHREADS, NTHREADS, 1)]
+void gen_vertex_info(uint3 id: SV_DispatchThreadID)
+{
+	float y = height_spectrum_tex[id.xy].x * height_factor;
+	float x = displace_spectrum_x_tex[id.xy].x * displacement_factor;
+	float z = displace_spectrum_z_tex[id.xy].x * displacement_factor;
+
+	float3 normal = float3(slop_spectrum_x_tex[id.xy].x, 1.0f, slop_spectrum_z_tex[id.xy].x);
+	normal = normalize(normal);
+	pos_tex[id.xy] = float4(x, y, z, 1.0f);
+	normal_tex[id.xy] = float4(normal, 0.0f);
+}
