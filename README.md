@@ -1,2 +1,2 @@
-# RadixNFFT
-a Radix N Fast Fourier Transform implemented in Unity with Compute Shader
+# LumiOcean
+an Unity FFT Ocean implementation. The FFT Library's from RadixNFFT.
