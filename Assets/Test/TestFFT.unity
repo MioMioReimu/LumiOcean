@@ -238,7 +238,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 90221a59cd6faf7489f58fa16c6440a1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  photo: {fileID: 2800000, guid: 2b3803915f11c4b4dac53c11fa27260a, type: 3}
+  photo: {fileID: 2800000, guid: 624267a8df2455348a89cafc258ac8c5, type: 3}
   fft: {fileID: 7200000, guid: 457247d6e5a2ae2488ed485fd415a532, type: 3}
 --- !u!64 &1398794389
 MeshCollider:

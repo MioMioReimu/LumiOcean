@@ -90,11 +90,21 @@ float phillips(float2 k)
 // directional wind spreading model in
 // Tessendorf's original paper "Simulating Ocean Water".
 float cosine_squared_dir_wind_spreading(float2 k) {
-	float2 k_nor = normalize(k);
-	float x = dot(k_nor, wind_dir);
-	return x * x * x * x * x * x;
+	/*float2 k_nor = normalize(k);
+	float x = dot(k, wind_dir);
+	return x * x * x * x * x * x;*/
 
-	/*float theta = atan2(k.y, k.x) - atan2(wind_dir.y, wind_dir.x);
+	/*float theta = atan2(k.y, k.x) - atan2(wind.y, wind.x);
+	if (theta > -PI / 2.0f && theta < PI / 2.0f)
+	{
+		return 2.0f / PI * pow(cos(theta), 2);
+	}
+	else
+	{
+		return 0;
+	}*/
+
+	float theta = atan2(k.y, k.x) - atan2(wind_dir.y, wind_dir.x);
 	float x = 2.0f / PI * pow(cos(theta), 2);
 	if (theta > -PI / 2.0f && theta < PI / 2.0f)
 	{
@@ -102,13 +112,37 @@ float cosine_squared_dir_wind_spreading(float2 k) {
 	}
 	else
 	{
-		return x * sqrt(x) * 0.25f;
-	}*/
+		return 0;
+	}
 }
 
 float dispersion(float2 k) {
-	float w_0 = 2.0f * PI / 200.0f;
-	return floor(sqrt(G * length(k)) / w_0) * w_0;
+	//float w_0 = 2.0f * PI / 200.0f;
+	return sqrt(G * length(k));// / w_0)* w_0;
+}
+
+float DonelanBannerDirectionalSpreading(float2 k)
+{
+    float betaS;
+    float omegap = 0.855f * G / length(wind.xy);
+    float ratio = dispersion(k) / omegap;
+
+    if (ratio < 0.95f)
+    {
+        betaS = 2.61f * pow(ratio, 1.3f);
+    }
+    if(ratio >= 0.95f && ratio < 1.6f)
+    {
+        betaS = 2.28f * pow(ratio, -1.3f);
+    }
+    if(ratio > 1.6f)
+    {
+        float epsilon = -0.4f + 0.8393f * exp(-0.567f * log(ratio * ratio));
+        betaS = pow(10, epsilon);
+    }
+    float theta = atan2(k.y, k.x) - atan2(wind.y, wind.x);
+
+    return betaS / max(1e-7f, 2.0f * tanh(betaS * PI) * pow(cosh(betaS * theta), 2));
 }
 
 inline float2 mul(float2 a, float2 b) {
@@ -134,10 +168,10 @@ void gen_phillips(uint3 id: SV_DispatchThreadID)
 
 	float2 gaussian = rand_tex[id.xy].xy;
 
-	float phi = phillips(k) * cosine_squared_dir_wind_spreading(k);
+	float phi = phillips(k) * DonelanBannerDirectionalSpreading(k);
 	phillips_tex[id.xy] = float2(phi, 0);
 
-	float2 spectrum = gaussian * sqrt(abs(phillips(k) * cosine_squared_dir_wind_spreading(k)) * 0.5f);
+	float2 spectrum = gaussian * sqrt(abs(phillips(k) * DonelanBannerDirectionalSpreading(k)) * 0.5f);
 	init_spectrum_tex[id.xy] = spectrum;
 }
 
@@ -149,8 +183,8 @@ void gen_spectrum(uint3 id: SV_DispatchThreadID)
 
 	float2 gaussian = rand_tex[id.xy].xy;
 
-	float2 spectrum = gaussian * sqrt(abs(phillips(k) * cosine_squared_dir_wind_spreading(k)) * 0.5f);
-	float2 spectrum_conj = gaussian * sqrt(abs(phillips(-k) * cosine_squared_dir_wind_spreading(-k)) * 0.5f);
+	float2 spectrum = gaussian * sqrt(abs(phillips(k) * DonelanBannerDirectionalSpreading(k)) * 0.5f);
+	float2 spectrum_conj = gaussian * sqrt(abs(phillips(-k) * DonelanBannerDirectionalSpreading(-k)) * 0.5f);
 	spectrum_conj.y *= -1.0f;
 
 	float2 omegat = exp_i(dispersion(k) * time);

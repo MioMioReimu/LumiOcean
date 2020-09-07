@@ -77,6 +77,7 @@ public class FFTOcean : MonoBehaviour
     public RenderTexture vtxTexture;
     public RenderTexture normalTexture;
 
+    public Material oceanMaterial;
     public void Awake()
     {
         var meshFilter = gameObject.GetComponent<MeshFilter>();
@@ -89,6 +90,7 @@ public class FFTOcean : MonoBehaviour
         {
             meshRenderer = gameObject.AddComponent<MeshRenderer>();
         }
+        oceanMaterial = meshRenderer.sharedMaterial;
     }
 
     void OnEnable()
@@ -142,6 +144,8 @@ public class FFTOcean : MonoBehaviour
         if (phillipsTexture) phillipsTexture.Release();
         initSpectrumTexture = null;
         phillipsTexture = null;
+
+        
     }
 
     private void Init()
@@ -259,6 +263,11 @@ public class FFTOcean : MonoBehaviour
         RenderTexture slopZTex = slopZFFT.IDFT();
         RenderTexture displaceXTex = displacementXFFT.IDFT();
         RenderTexture displaceZTex = displacementZFFT.IDFT();
+
+        if (oceanMaterial)
+        {
+            oceanMaterial.SetTexture("_DisplaceTex", heightOutTexture);
+        }
 
         oceanShader.SetTexture(KERNEL_GEN_VERTEX_INFO, SHADER_TEX_HEIGHT, heightTex);
         oceanShader.SetTexture(KERNEL_GEN_VERTEX_INFO, SHADER_TEX_SLOP_X, slopXTex);
