@@ -395,12 +395,12 @@ MonoBehaviour:
   fftSize: 512
   phillpsFactor: 1
   xzFactor: 1
-  heightScale: 1
+  heightScale: 2
   bubbleScale: 1
   bubbleThreshold: 1
   fftShader: {fileID: 7200000, guid: 457247d6e5a2ae2488ed485fd415a532, type: 3}
   oceanShader: {fileID: 7200000, guid: c5ad87588ef443c409efede3adac97c5, type: 3}
-  windSpeed: {x: 10, y: 2}
+  windSpeed: {x: 30, y: 30}
   timeScale: 1
   gridSize: {x: 511, y: 511}
   gridScale: 0.2
@@ -415,3 +415,4 @@ MonoBehaviour:
   heightOutTexture: {fileID: 0}
   vtxTexture: {fileID: 0}
   normalTexture: {fileID: 0}
+  oceanMaterial: {fileID: 0}

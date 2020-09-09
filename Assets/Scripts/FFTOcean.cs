@@ -264,10 +264,7 @@ public class FFTOcean : MonoBehaviour
         RenderTexture displaceXTex = displacementXFFT.IDFT();
         RenderTexture displaceZTex = displacementZFFT.IDFT();
 
-        if (oceanMaterial)
-        {
-            oceanMaterial.SetTexture("_DisplaceTex", heightOutTexture);
-        }
+        
 
         oceanShader.SetTexture(KERNEL_GEN_VERTEX_INFO, SHADER_TEX_HEIGHT, heightTex);
         oceanShader.SetTexture(KERNEL_GEN_VERTEX_INFO, SHADER_TEX_SLOP_X, slopXTex);
@@ -277,6 +274,11 @@ public class FFTOcean : MonoBehaviour
         oceanShader.SetTexture(KERNEL_GEN_VERTEX_INFO, SHADER_TEX_VERTEX, vtxTexture);
         oceanShader.SetTexture(KERNEL_GEN_VERTEX_INFO, SHADER_TEX_NORMAL_FOAM, normalTexture);
         oceanShader.Dispatch(KERNEL_GEN_VERTEX_INFO, fftSize / THREAD_SIZE, fftSize / THREAD_SIZE, 1);
+
+        if (oceanMaterial)
+        {
+            oceanMaterial.SetTexture("_DisplaceTex", vtxTexture);
+        }
     }
 
     void GenGridMesh()

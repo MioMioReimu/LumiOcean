@@ -208,9 +208,14 @@ void gen_spectrum(uint3 id: SV_DispatchThreadID)
 [numthreads(NTHREADS, NTHREADS, 1)]
 void gen_vertex_info(uint3 id: SV_DispatchThreadID)
 {
-	float y = height_spectrum_tex[id.xy].x * height_factor;
-	float x = displace_spectrum_x_tex[id.xy].x * displacement_factor;
-	float z = displace_spectrum_z_tex[id.xy].x * displacement_factor;
+	float sign_factor = 1.0f;
+	/*if (((id.x + id.y) & 1U) == 1) {
+		sign_factor = -1.0f;
+	}*/
+	//float sign_factor = sign(1 - ((id.x + id.y) & 1) * 2);
+	float y = length(height_spectrum_tex[id.xy].xy) / float(n) * height_factor * sign_factor;
+	float x = length(displace_spectrum_x_tex[id.xy].xy) / float(n) * displacement_factor * sign_factor;
+	float z = length(displace_spectrum_z_tex[id.xy].xy) / float(n) * displacement_factor * sign_factor;
 
 	float3 normal = float3(slop_spectrum_x_tex[id.xy].x, 1.0f, slop_spectrum_z_tex[id.xy].x);
 	normal = normalize(normal);
